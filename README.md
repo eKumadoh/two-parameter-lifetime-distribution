@@ -1,4 +1,4 @@
-# A New Two-Parameter Lifetime Distribution with Bathtub Shape or Increasing Failure Rate
+# Two-Parameter Lifetime Distribution with Bathtub Shape or Increasing Failure Rate
 
 # Overview
 
