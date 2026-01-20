@@ -1,0 +1,248 @@
+---
+title: "A new two-parameter lifetime distribution with  bathtub shape or increasing failure rate function"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Using Inverse transform to generate observations from the new
+distribution $$
+y = 1 - e^{\lambda(1 - e^{x^\beta})}
+$$ $$
+e^{\lambda(1 - e^{x^\beta})} = 1 - y 
+$$
+
+Taking the log on both sides $$
+\lambda(1 - e^{x^\beta}) = log(1 - y)
+$$
+
+$$
+1 - e^{x^\beta} = \frac{1}{\lambda}log(1-y)
+$$
+
+Taking the log of both sides $$
+log(1 - \frac{1}{\lambda}log(1-y)) = x^\beta 
+$$
+
+$$
+x = log(1 - \frac{1}{\lambda}log(1-y))^{\frac{1}{\beta}}
+$$
+
+where y \~ U(0,1)
+
+```{r random-number-generator}
+library(knitr)
+library(purrr)
+library(dplyr)
+library(DataSetsUni)
+
+rtplf <- \(n, beta, lambda){
+  u <- runif(n)
+  t <- ( log( 1 - (log(1 - u) / lambda) ))^(1/beta)
+  return(t)
+}
+```
+
+Loglikelihood of the two-parameter lifetime distribution with bathtub
+shape or increasing failure rate function $$
+F(X) = 1 - e^{\lambda(1 - e^{x^\beta})}
+$$ $$
+S(X) = 1 - F(X) = 1 - (1 - e^{\lambda(1 - e^{x^\beta})})
+$$ $$
+= e^{\lambda(1 - e^{x^\beta})}
+$$
+
+$$
+H(X) = -log(S(X)) = -log(e^{\lambda(1 - e^{x^\beta})}) = -\lambda(1-e^{x^\beta})
+$$ $$
+h(x) = \frac{\partial H(X)}{x} = \lambda \beta (x^{\beta - 1})e^{x^\beta}
+$$
+
+$$
+l(\theta) = \sum_i^n[\delta_ilog(h(x_i|\theta))] - \sum H(X)
+$$
+
+```{r}
+ll <- \(x, par){
+  beta = par[1]
+  lambda = par[2]
+  delta = kidney$status
+  
+  loglik = sum(delta * (log(lambda) + log(beta) + (beta -1 )*log(x) + x^beta)) - sum(-(lambda *(1 - exp(x^beta))))
+  return(-loglik)
+}
+```
+
+```{r loglikelihood-complete-data}
+#Loglikelihood function
+#Assuming complete data
+ll_tplf <- \(x, par){
+  beta = par[1]
+  lambda = par[2]
+  delta = rep(1, length(x))
+  
+  loglik = sum(delta*(log(lambda) + log(beta) + (beta -1)*log(x) + x^beta)) +
+    sum(lambda*(1 - exp(x^beta)))
+  return(-loglik)
+}
+```
+
+Monte Carlo Simulation for N = 5000 and n = 50, 100, 150, 200, 250
+
+```{r monte-carlo}
+estimates <- \(X){
+  res = optim(par = c(0.1, 0.1),
+      fn = ll_tplf,
+      lower = c(1e-5, 1e-5),
+      method = "L-BFGS-B",
+      x = X, hessian = T)
+  
+  invH = solve(res$hessian)
+  
+  res_df = tibble(beta = res$par[1],
+                  lambda = res$par[2],
+                  beta_var = invH[1,1],
+                  lambda_var = invH[2,2])
+  return(res_df)
+}
+```
+
+```{r gof}
+set.seed(351)
+res <- \(n, N, beta, lambda){
+  df = map_dfr(1:N, ~estimates(rtplf(n,beta,lambda)))
+  
+  tibble(n = n,
+        `Bias(beta)` = mean(df$beta) - beta,
+         `APE(beta)` = mean(abs((df$beta - beta)) / beta),
+         `MSE(beta)` = mean((df$beta - beta)^2),
+         `CP(beta)` = mean(between(rep(beta,N), 
+                                   df$beta - 1.96 *
+                                     sqrt(df$beta_var), 
+                                   df$beta + 1.96 * 
+                                     sqrt(df$beta_var))),
+        `Bias(lambda)` = mean(df$lambda) - lambda,
+         `APE(lambda)` = mean(abs((df$lambda - lambda)) / lambda),
+         `MSE(lambda)` = mean((df$lambda - lambda)^2),
+         `CP(lambda)` = mean(between(rep(lambda,N), 
+                                   df$lambda - 1.96 *
+                                     sqrt(df$lambda_var), 
+                                   df$lambda + 1.96 * 
+                                     sqrt(df$lambda_var))))
+}
+```
+
+$$
+\text{For} \ \beta = 0.4; \ \lambda = 2
+$$
+
+```{r}
+map_dfr(c(50, 100, 150, 200, 250), ~res(.x, 5000, 0.4, 2)) |> 
+  kable()
+```
+
+$$
+\text{For} \ \beta = 0.8; \ \lambda = 2
+$$
+
+```{r}
+map_dfr(c(50, 100, 150, 200, 250), ~res(.x, 5000, 0.8, 2)) |> 
+  kable()
+```
+
+$$
+\text{For} \ \beta = 1.2; \ \lambda = 2
+$$
+
+```{r}
+map_dfr(c(50, 100, 150, 200, 250), ~res(.x, 5000, 1.2, 2)) |> 
+  kable()
+
+```
+
+$$
+\text{For} \ \beta = 0.4; \ \lambda = 0.5
+$$
+
+```{r}
+map_dfr(c(50, 100, 150, 200, 250), ~res(.x, 5000, 0.4, 0.5)) |> 
+  kable()
+```
+
+$$
+\text{For} \ \beta = 0.8; \ \lambda = 0.5
+$$
+
+```{r}
+map_dfr(c(50, 100, 150, 200, 250), ~res(.x, 5000, 0.8, 0.5)) |> 
+  kable()
+```
+
+$$
+\text{For} \ \beta = 1.2; \ \lambda = 0.5
+$$
+
+```{r}
+map_dfr(c(50, 100, 150, 200, 250), ~res(.x, 5000, 1.2, 0.5)) |> 
+  kable()
+```
+
+Practical Application to the strength of Glass Fibers Data in the
+DataSetsUni package
+
+```{r}
+#pdf of the new distribution
+dtplf <- \(x, beta, lambda){
+  hx = lambda*beta*(x^(beta-1))*exp(x^beta)
+  Sx = exp(lambda*(1-exp(x^beta)))
+  pdf = hx*Sx
+  return(pdf)
+}
+
+#Parameter estimate
+fit <- optim(par = c(0.1, 0.1),
+      fn = ll_tplf,
+      lower = c(1e-5, 1e-5),
+      method = "L-BFGS-B",
+      x = data_glassf,
+      hessian = T)
+
+hist(data_glassf, freq = F)
+curve(dtplf(x, fit$par[1], fit$par[2]),
+      from = min(data_glassf),
+      to   = max(data_glassf),
+      col = "red", lwd = 2, add = TRUE)
+```
+
+```{r}
+library(survival)
+library(muhaz)
+
+fit <- survfit(Surv(time, status) ~ 1, data = kidney)
+haz <- muhaz(kidney$time, kidney$status)
+plot(haz, main = "Estimated Hazard Function")
+
+
+ll_tplf <- \(x, par){
+  beta = par[1]
+  lambda = par[2]
+  delta = kidney$status
+  
+  loglik = sum(delta*(log(lambda) + log(beta) + (beta -1)*log(x) + x^beta)) +
+    sum(lambda*(1 - exp(x^beta)))
+  return(-loglik)
+}
+
+optim(par = c(0.1, 0.1),
+      fn = ll_tplf,
+      lower = c(1e-5, 1e-5),
+      method = "L-BFGS-B",
+      x = kidney$time,
+      hessian = T)
+```
