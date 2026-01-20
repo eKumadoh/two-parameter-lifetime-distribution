@@ -66,9 +66,6 @@ The repository focuses exclusively on **computational implementation**, includin
 
 ---
 
-## Repository Structure
-
-
 ---
 
 ## Reproducibility
